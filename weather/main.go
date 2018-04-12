@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/hidelbreq/cultivate-bot/model"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -27,11 +29,13 @@ type YahooWeather struct {
 	} `json:"Feature"`
 }
 
-func Handler() (*Response, error) {
-	fmt.Println("Hello")
+func Handler(p *model.SlackPost) (*Response, error) {
+	fmt.Println("Hello", p)
 	lon := os.Getenv("LOCATION_LON")
 	lan := os.Getenv("LOCATION_LAT")
 	appId := os.Getenv("APP_ID")
+
+	webhookURL := os.Getenv("SLACK_WEBHOOK_URL")
 
 	u := "https://map.yahooapis.jp/weather/V1/place" +
 		"?coordinates=" + lon + "," + lan +
@@ -77,7 +81,19 @@ func Handler() (*Response, error) {
 		}
 	}
 
-	return sendMessage(future, nowRainfall)
+	r, err := sendMessage(future, nowRainfall)
+	if p.Text == "" {
+		b, err := json.Marshal(r)
+		if err != nil {
+			return &Response{Text: "marshal failed"}, err
+		}
+
+		_, err = http.Post(webhookURL, "application/json", bytes.NewBuffer(b))
+		if err != nil {
+			fmt.Println("webhook post error", err)
+		}
+	}
+	return r, err
 }
 
 func sendMessage(future bool, nowRainfall float32) (*Response, error) {
